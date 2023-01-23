@@ -512,7 +512,7 @@ void acceptNewClient(int listen_fd) {
     }
     int index = findFreeClient(new_client_fd);
     addFdToPollFds(new_client_fd, POLLIN);
-    fprintf(stderr, "new client %d accepted\n", index);
+    // fprintf(stderr, "new client %d accepted\n", index);
 }
 
 void changeEventForFd(int fd, short new_events) {
@@ -538,7 +538,7 @@ void disconnectClient(int client_num) {
     if (client_num < 0 || client_num >= CLIENTS_SIZE) {
         return;
     }
-    fprintf(stderr, "disconnecting client %d...\n", client_num);
+    // fprintf(stderr, "disconnecting client %d...\n", client_num);
     if (clients[client_num].request != NULL) {
         memset(clients[client_num].request, 0, clients[client_num].request_index * sizeof(char));
         clients[client_num].request_index = 0;
@@ -679,7 +679,7 @@ void readFromClient(int client_num) {
         return;
     }
     else if (was_read == 0) {
-        fprintf(stderr, "client %d closed connection\n", client_num);
+        // fprintf(stderr, "client %d closed connection\n", client_num);
         disconnectClient(client_num);
         return;
     }
@@ -724,6 +724,7 @@ void readFromClient(int client_num) {
         bool is_request_in_cache;
         int cache_index = findAtCache(url, url_len, &is_request_in_cache);
         if (is_request_in_cache) {
+            printf("getting %s from cache...\n", url);
             addSubscriber(client_num, cache_index);
             clients[client_num].cache_index = cache_index;
             clients[client_num].write_response_index = 0;
@@ -734,6 +735,7 @@ void readFromClient(int client_num) {
             free(url);
             return;
         }
+        printf("reading %s from server...\n", url);
         char *host = NULL;
         for (size_t i = 0; i < num_headers; i++) {
             if (strncmp(headers[i].name, "Host", 4) == 0) {
