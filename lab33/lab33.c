@@ -57,6 +57,7 @@ int WRITE_STOP_FD = -1;
 int READ_STOP_FD = -1;
 
 void destroyPollFds(struct pollfd *poll_fds, int *poll_last_index) {
+    //fprintf(stderr, "destroying poll_fds...\n");
     for (int i = 0; i < *poll_last_index; i++) {
         if (poll_fds[i].fd > 0) {
             close(poll_fds[i].fd);
@@ -451,12 +452,13 @@ int initListener(int port) {
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
 
-    int bind_res;
-    while ((bind_res = bind(listen_fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in))) != 0) {
-        printf("Port already in use, retrying...\n");
-        sleep(5);
+    int bind_res = bind(listen_fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in));
+    if (bind_res != 0) {
+        perror("bind");
+        close(listen_fd);
+        cleanUp();
+        exit(ERROR_BIND);
     }
-    printf("Bind went successfully!");
 
     int listen_res = listen(listen_fd, LISTEN_NUM);
     if (listen_res == -1) {
@@ -519,7 +521,7 @@ void disconnectClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, st
     if (client_num < 0 || client_num >= CLIENTS_SIZE) {
         return;
     }
-    fprintf(stderr, "disconnecting client %d...\n", client_num);
+    // fprintf(stderr, "disconnecting client %d...\n", client_num);
     if (clients[client_num].request != NULL) {
         //free(clients[client_num].request);
         //clients[client_num].request = NULL;
@@ -721,6 +723,7 @@ void findAndAddCacheRecord(char *url, size_t url_len, client_t *clients, size_t 
             continue;
         }
         if (list_nodes->record->URL_LEN == url_len && strncmp(list_nodes->record->url, url, url_len) == 0) {
+            printf("getting %s from cache\n", url);
             clients[client_num].cache_record = list_nodes->record;
             addSubscriber(clients[client_num].thread_fd, list_nodes->record);
             clients[client_num].write_response_index = 0;
@@ -835,7 +838,7 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
         return;
     }
     else if (was_read == 0) {
-        fprintf(stderr, "client %d closed connection\n", client_num);
+        // fprintf(stderr, "client %d closed connection\n", client_num);
         disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
         return;
     }
@@ -908,11 +911,9 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
 }
 
 
-void writeToServer(server_t *servers, 
-                   size_t SERVERS_SIZE, 
-                   int server_num, 
-                   struct pollfd *poll_fds,
-                   int *poll_last_index) {
+void writeToServer(server_t *servers, size_t SERVERS_SIZE, int server_num, struct pollfd *poll_fds,
+        int *poll_last_index) {
+    //fprintf(stderr, "write to server %d, SERVERS_SIZE = %lu\n", server_num, SERVERS_SIZE);
     if (server_num < 0 || server_num >= SERVERS_SIZE || servers[server_num].fd == -1) {
         return;
     }
@@ -920,7 +921,7 @@ void writeToServer(server_t *servers,
                             &servers[server_num].cache_record->request[servers[server_num].write_request_index],
                             servers[server_num].cache_record->REQUEST_SIZE -
                                 servers[server_num].write_request_index);
-    
+    //fprintf(stderr, "written %ld to server %d\n", written, server_num);
     if (written < 0) {
         fprintf(stderr, "error in server %d ", server_num);
         perror("write");
@@ -933,18 +934,16 @@ void writeToServer(server_t *servers,
     }
 }
 
-void readFromServer(server_t *servers,
-                    size_t SERVERS_SIZE,
-                    int server_num, 
-                    struct pollfd *poll_fds,
-                    int *poll_last_index) {
-    
+void readFromServer(server_t *servers, size_t SERVERS_SIZE, int server_num, struct pollfd *poll_fds,
+        int *poll_last_index) {
+    //fprintf(stderr, "read from server %d\n", server_num);
     if (server_num < 0 || server_num >= SERVERS_SIZE || servers[server_num].fd == -1) {
         return;
     }
     char buf[BUFSIZ];
-    ssize_t was_read = read(servers[server_num].fd, buf, BUFSIZ);
     
+    ssize_t was_read = read(servers[server_num].fd, buf, BUFSIZ);
+    //fprintf(stderr, "server %d was_read = %ld\n", server_num, was_read);
     if (was_read < 0) {
         fprintf(stderr, "error in server %d ", server_num);
         perror("read");
@@ -984,6 +983,9 @@ void readFromServer(server_t *servers,
     memcpy(&servers[server_num].cache_record->response[servers[server_num].cache_record->response_index],
            buf, was_read);
     size_t prev_len = servers[server_num].cache_record->response_index;
+    if (prev_len == 0) {
+        printf("reading %s from server\n", servers[server_num].cache_record->url);
+    }
     servers[server_num].cache_record->response_index += was_read;
     pthread_rwlock_unlock(&servers[server_num].cache_record->rw_lock);
     int minor_version, status;
@@ -998,6 +1000,7 @@ void readFromServer(server_t *servers,
                                   &num_headers, prev_len);
     pthread_rwlock_unlock(&servers[server_num].cache_record->rw_lock);
     notifySubscribers(servers[server_num].cache_record);
+    
     if (pret > 0) {
         if (status >= 200 && status < 300) {
             servers[server_num].cache_record->private = false;
@@ -1006,13 +1009,8 @@ void readFromServer(server_t *servers,
 }
 
 
-void writeToClient(client_t *clients, 
-                   size_t CLIENTS_SIZE, 
-                   int client_num, 
-                   struct pollfd *poll_fds,
-                   int *poll_last_index, 
-                   server_t *servers, 
-                   size_t SERVERS_SIZE) {
+void writeToClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, struct pollfd *poll_fds,
+        int *poll_last_index, server_t *servers, size_t SERVERS_SIZE) {
     
     if (client_num < 0 || client_num >= CLIENTS_SIZE || clients[client_num].fd == -1) {
         fprintf(stderr, "invalid client_num %d\n", client_num);
@@ -1024,14 +1022,14 @@ void writeToClient(client_t *clients,
         return;
     }
     
-    if (clients[client_num].cache_record->server_index == -1 
-        && !clients[client_num].cache_record->full) {
-        
+    if (clients[client_num].cache_record->server_index == -1 &&
+        !clients[client_num].cache_record->full) {
+        //fprintf(stderr, "invalid cache record detected by client %d\n", client_num);
         freeCacheRecord(clients[client_num].cache_record, servers, SERVERS_SIZE, poll_fds, poll_last_index);
         disconnectClient(clients, CLIENTS_SIZE, client_num, poll_fds, poll_last_index);
         return;
     }
-    
+    //fprintf(stderr, "acquire rdlock by client %d...\n", client_num);
     pthread_rwlock_rdlock(&clients[client_num].cache_record->rw_lock);
     
     ssize_t written = write(clients[client_num].fd,
@@ -1039,7 +1037,7 @@ void writeToClient(client_t *clients,
                             clients[client_num].cache_record->response_index -
                                 clients[client_num].write_response_index);
     pthread_rwlock_unlock(&clients[client_num].cache_record->rw_lock);
-    
+    //fprintf(stderr, "written %ld to client %d\n", written, client_num);
     if (written < 0) {
         fprintf(stderr, "error in client %d ", client_num);
         perror("write");
@@ -1065,7 +1063,7 @@ static void sigCatch(int sig) {
 }
 
 void *threadFunc(void *arg) {
-    
+    //fprintf(stderr, "starting pooled thread...\n");
     int thread_fd = eventfd(0, EFD_NONBLOCK);
     if (thread_fd < 0) {
         pthread_mutex_lock(&thread_pool_size_mutex);
@@ -1073,7 +1071,7 @@ void *threadFunc(void *arg) {
         pthread_mutex_unlock(&thread_pool_size_mutex);
         pthread_exit((void *) ERROR_INIT_EVENT_FD);
     }
-    
+    //fprintf(stderr, "pooled thread: event_fd opened\n");
     size_t POLL_TABLE_SIZE = 8;
     int poll_last_index = -1;
     struct pollfd *poll_fds = initPollFds(POLL_TABLE_SIZE, &poll_last_index);
@@ -1084,7 +1082,7 @@ void *threadFunc(void *arg) {
         close(thread_fd);
         pthread_exit((void *) ERROR_ALLOC);
     }
-    
+    //fprintf(stderr, "pooled thread: poll_fds created\n");
     addFdToPollFds(&poll_fds, &poll_last_index, &POLL_TABLE_SIZE, get_rfd_spipe(), POLLIN);
     addFdToPollFds(&poll_fds, &poll_last_index, &POLL_TABLE_SIZE, thread_fd, POLLIN);
 
@@ -1097,6 +1095,7 @@ void *threadFunc(void *arg) {
         destroyPollFds(poll_fds, &poll_last_index);
         pthread_exit((void *) ERROR_ALLOC);
     }
+    //fprintf(stderr, "pooled thread: clients created\n");
     size_t SERVERS_SIZE = 4;
     server_t *servers = initServers(SERVERS_SIZE);
     if (servers == NULL) {
@@ -1107,8 +1106,10 @@ void *threadFunc(void *arg) {
         destroyPollFds(poll_fds, &poll_last_index);
         pthread_exit((void *) ERROR_ALLOC);
     }
+    //fprintf(stderr, "pooled thread: servers created\n");
 
     while (!is_stop) {
+        //fprintf(stderr, "pooled thread poll()\n");
         int poll_res = poll(poll_fds, poll_last_index, TIMEOUT * 1000);
         if (is_stop) {
             break;
@@ -1124,6 +1125,17 @@ void *threadFunc(void *arg) {
         int num_handled_fd = 0;
         size_t i = 0;
         size_t prev_last_index = poll_last_index;
+        /*fprintf(stderr, "pooled thread: poll_res = %d, poll_last_index = %d\n", poll_res, poll_last_index);
+        for (int j = 0; j < prev_last_index; j++) {
+            fprintf(stderr, "poll_fds[%d] = %d : ", j, poll_fds[j].fd);
+            if (poll_fds[j].revents & POLLIN) {
+                fprintf(stderr, "POLLIN ");
+            }
+            if (poll_fds[j].revents & POLLOUT) {
+                fprintf(stderr, "POLLOUT ");
+            }
+            fprintf(stderr, "\n");
+        }*/
         while (num_handled_fd < poll_res && i < prev_last_index && !is_stop) {
             if (poll_fds[i].fd == get_rfd_spipe() && (poll_fds[i].revents & POLLIN)) {
                 char s;
@@ -1134,11 +1146,22 @@ void *threadFunc(void *arg) {
                 }
                 if (read_res > 0) {
                     int new_client_fd = popTask(task_queue);
+                    //fprintf(stderr, "preparing to add fd %d to local clients\n", new_client_fd);
                     if (new_client_fd != -1) {
                         int index = findFreeClient(&clients, &CLIENTS_SIZE, new_client_fd);
                         addFdToPollFds(&poll_fds, &poll_last_index, &POLL_TABLE_SIZE, new_client_fd, POLLIN);
                         clients[index].thread_fd = thread_fd;
-                        fprintf(stderr, "client %d added to local poll_fds\n", index);
+                        // fprintf(stderr, "client %d added to local poll_fds\n", index);
+                        /*for (int j = 0; j < poll_last_index; j++) {
+                            fprintf(stderr, "poll_fds[%d].fd = %d waiting: ", j, poll_fds[j].fd);
+                            if (poll_fds[j].events & POLLIN) {
+                                fprintf(stderr, "POLLIN ");
+                            }
+                            if (poll_fds[j].events & POLLOUT) {
+                                fprintf(stderr, "POLLOUT ");
+                            }
+                            fprintf(stderr, "\n");
+                        }*/
                     }
                 }
                 num_handled_fd += 1;
@@ -1148,6 +1171,8 @@ void *threadFunc(void *arg) {
             if (poll_fds[i].fd == thread_fd && (poll_fds[i].revents & POLLIN)) {
                 uint64_t u;
                 read(thread_fd, &u, sizeof(u));
+                //ssize_t read_res =
+                //fprintf(stderr, "woke up pooled thread because of cache read_res = %ld\n", read_res);
                 for (int j = 0; j < CLIENTS_SIZE; j++) {
                     if (clients[j].fd != -1 && clients[j].cache_record != NULL) {
                         pthread_rwlock_rdlock(&clients[j].cache_record->rw_lock);
@@ -1173,6 +1198,7 @@ void *threadFunc(void *arg) {
             if (client_num == -1) {
                 server_num = findServerByFd(servers, &SERVERS_SIZE, poll_fds[i].fd);
             }
+            //fprintf(stderr, "poll_fds[%lu].fd = %d, client %d, server %d\n", i, poll_fds[i].fd, client_num, server_num);
             bool handled = false;
             if (poll_fds[i].revents & POLLIN) {
                 if (client_num != -1) {
@@ -1193,6 +1219,9 @@ void *threadFunc(void *arg) {
                 }
                 handled = true;
             }
+            /*if (client_num == -1 && server_num == -1 && poll_fds[i].fd != thread_fd && poll_fds[i].fd != get_rfd_spipe()) {
+                removeFromPollFds(poll_fds, &poll_last_index, poll_fds[i].fd);
+            }*/
             if (handled) {
                 num_handled_fd += 1;
             }
@@ -1209,7 +1238,7 @@ void *threadFunc(void *arg) {
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
-        fprintf(stderr, "Error wrong amount of arguments\n");
+        fprintf(stderr, "Error wrong amount of arguments\nexpected:\n1) thread poll size\n2) port\n");
         exit(ERROR_INVALID_ARGS);
     }
     char *invalid_sym;
@@ -1311,6 +1340,7 @@ int main(int argc, char *argv[]) {
     addFdToPollFds(&poll_fds, &poll_last_index, &POLL_TABLE_SIZE, listen_fd, POLLIN);
 
     while (!is_stop) {
+        //fprintf(stderr, "main poll()\n");
         int poll_res = poll(poll_fds, poll_last_index, TIMEOUT * 1000);
         if (poll_res < 0) {
             perror("poll");
@@ -1323,8 +1353,21 @@ int main(int argc, char *argv[]) {
         int num_handled_fd = 0;
         size_t i = 0;
         size_t prev_last_index = poll_last_index;
+        /*fprintf(stderr, "main: poll_res = %d, prev_last_index = %lu\n", poll_res, prev_last_index);
+        for (int j = 0; j < prev_last_index; j++) {
+            fprintf(stderr, "poll_fds[%d] = %d : ", j, poll_fds[j].fd);
+            if (poll_fds[j].revents & POLLIN) {
+                fprintf(stderr, "POLLIN ");
+            }
+            if (poll_fds[j].revents & POLLOUT) {
+                fprintf(stderr, "POLLOUT ");
+            }
+            fprintf(stderr, "\n");
+        }*/
         while (num_handled_fd < poll_res && i < prev_last_index && !is_stop) {
+            //fprintf(stderr, "main: i = %lu, num_handled = %d\n", i, num_handled_fd);
             if (poll_fds[i].fd == READ_STOP_FD && (poll_fds[i].revents & POLLIN)) {
+                //fprintf(stderr, "main received stop signal\n");
                 removeFromPollFds(poll_fds, &poll_last_index, READ_STOP_FD);
                 READ_STOP_FD = -1;
                 destroyPollFds(poll_fds, &poll_last_index);
@@ -1332,11 +1375,16 @@ int main(int argc, char *argv[]) {
                 exit(0);
             }
             if (poll_fds[i].fd == listen_fd && (poll_fds[i].revents & POLLIN)) {
+                //fprintf(stderr, "acceptNewClient()\n");
                 acceptNewClient(listen_fd);
                 num_handled_fd += 1;
             }
             i += 1;
+
+            //fprintf(stderr, "poll_fds[%lu].fd = %d, client %d, server %d\n", i, poll_fds[i].fd, client_num, server_num);
+
         }
+        //printCacheList();
     }
     removeFromPollFds(poll_fds, &poll_last_index, READ_STOP_FD);
     READ_STOP_FD = -1;
