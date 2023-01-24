@@ -57,6 +57,8 @@ int WRITE_STOP_FD = -1;
 int READ_STOP_FD = -1;
 
 void destroyPollFds(struct pollfd *poll_fds, int *poll_last_index) {
+    # удалить очередь
+    
     //fprintf(stderr, "destroying poll_fds...\n");
     for (int i = 0; i < *poll_last_index; i++) {
         if (poll_fds[i].fd > 0) {
@@ -69,6 +71,8 @@ void destroyPollFds(struct pollfd *poll_fds, int *poll_last_index) {
 }
 
 void removeFromPollFds(struct pollfd * poll_fds, int *poll_last_index, int fd) {
+    # удалить всех подписчиков на ивенты для дескриптора fd
+    
     if (fd < 0) {
         return;
     }
@@ -112,6 +116,7 @@ void destroyRwLockAttr() {
 }
 
 void destroyCacheList() {
+    # удалить кэш таблицу и все записи в ней
     destroyList(cache_list);
     valid_cache = false;
 }
@@ -129,6 +134,7 @@ typedef struct client {
 } client_t;
 
 void destroyClients(client_t *clients, size_t *CLIENTS_SIZE, struct pollfd *poll_fds, int *poll_last_index) {
+    # удалить все клиенты
     //fprintf(stderr, "destroying clients...\n");
     for (int i = 0; i < *CLIENTS_SIZE; i++) {
         if (clients[i].request != NULL) {
@@ -157,6 +163,7 @@ typedef struct server {
 } server_t;
 
 void destroyServers(server_t *servers, size_t *SERVERS_SIZE, struct pollfd *poll_fds, int *poll_last_index) {
+    # удалить все сервера
     //fprintf(stderr, "destroying servers...\n");
     for (int i = 0; i < *SERVERS_SIZE; i++) {
         if (servers[i].fd != -1) {
@@ -172,6 +179,7 @@ void destroyServers(server_t *servers, size_t *SERVERS_SIZE, struct pollfd *poll
 }
 
 void cleanUp() {
+    # вычистить всё место, которое выделяли под сервра, клиенты, очереди и кэша
     fprintf(stderr, "\ncleaning up...\n");
     if (!is_stop) {
         is_stop = true;
@@ -218,12 +226,14 @@ void initRwLockAttr() {
 }
 
 void initEmptyServer(server_t *servers, size_t i) {
+     # подготовка i-ого сервера
     servers[i].fd = -1;
     servers[i].cache_record = NULL;
     servers[i].write_request_index = -1;
 }
 
 server_t *initServers(size_t SERVERS_SIZE) {
+    # подготовка массива серверов
     server_t *servers = (server_t *) calloc(SERVERS_SIZE, sizeof(server_t));
     if (servers == NULL) {
         fprintf(stderr, "failed to alloc memory for servers\n");
@@ -236,6 +246,7 @@ server_t *initServers(size_t SERVERS_SIZE) {
 }
 
 void reallocServers(server_t **servers, size_t *SERVERS_SIZE) {
+    # увеличить число серверов, если слишком много запросов на удалённый сервер
     size_t prev_size = *SERVERS_SIZE;
     *SERVERS_SIZE *= 2;
     *servers = realloc(*servers, *SERVERS_SIZE * sizeof(server_t));
@@ -245,6 +256,7 @@ void reallocServers(server_t **servers, size_t *SERVERS_SIZE) {
 }
 
 int findFreeServer(server_t **servers, size_t *SERVERS_SIZE, int server_fd) {
+    # найти свободный сервер (его место в массиве)
     if (server_fd < 0) {
         return -1;
     }
@@ -261,6 +273,7 @@ int findFreeServer(server_t **servers, size_t *SERVERS_SIZE, int server_fd) {
 }
 
 int findServerByFd(server_t *servers, const size_t *SERVERS_SIZE, int fd) {
+    # вернуть индекс сервера по его файловому дескриптору
     if (fd < 0) {
         return -1;
     }
@@ -273,6 +286,7 @@ int findServerByFd(server_t *servers, const size_t *SERVERS_SIZE, int fd) {
 }
 
 void initEmptyClient(client_t *clients, size_t i) {
+    # подготовка i-ого клиента
     clients[i].fd = -1;
     clients[i].thread_fd = -1;
     clients[i].request_index = 0;
@@ -284,6 +298,7 @@ void initEmptyClient(client_t *clients, size_t i) {
 }
 
 client_t *initClients(size_t CLIENTS_SIZE) {
+    # подготовка массива клиентов
     client_t *clients = (client_t *) calloc(CLIENTS_SIZE, sizeof(client_t));
     if (clients == NULL) {
         fprintf(stderr, "failed to alloc memory for clients\n");
@@ -296,6 +311,7 @@ client_t *initClients(size_t CLIENTS_SIZE) {
 }
 
 void reallocClients(client_t **clients, size_t *CLIENTS_SIZE) {
+    # увеличить число клиентов, если слишком много запросов
     size_t prev_size = *CLIENTS_SIZE;
     *CLIENTS_SIZE *= 2;
     *clients = realloc(*clients, *CLIENTS_SIZE * sizeof(client_t));
@@ -305,6 +321,7 @@ void reallocClients(client_t **clients, size_t *CLIENTS_SIZE) {
 }
 
 int findFreeClient(client_t **clients, size_t *CLIENTS_SIZE, int client_fd) {
+    # найти свободный клиент (его место в массиве)
     if (client_fd < 0) {
         return -1;
     }
@@ -321,6 +338,7 @@ int findFreeClient(client_t **clients, size_t *CLIENTS_SIZE, int client_fd) {
 }
 
 int findClientByFd(client_t *clients, const size_t *CLIENTS_SIZE, int fd) {
+    # вернуть индекс слиента по его файловому дескриптору
     if (fd < 0) {
         return -1;
     }
@@ -333,6 +351,7 @@ int findClientByFd(client_t *clients, const size_t *CLIENTS_SIZE, int fd) {
 }
 
 void initEmptyCacheRecord(cache_t *record) {
+    # подготовка i-ой записи кэша
     if (record == NULL) {
         return;
     }
@@ -355,6 +374,7 @@ void initEmptyCacheRecord(cache_t *record) {
 }
 
 void initCacheList() {
+    # подготовка кэша
     cache_list = initList();
     if (cache_list == NULL) {
         cleanUp();
@@ -364,6 +384,7 @@ void initCacheList() {
 }
 
 struct pollfd *initPollFds(size_t POLL_TABLE_SIZE, int *poll_last_index) {
+    # подготовка очереди
     struct pollfd *poll_fds = (struct pollfd *)calloc(POLL_TABLE_SIZE, sizeof(struct pollfd));
     if (poll_fds == NULL) {
         fprintf(stderr, "failed to alloc memory for poll_fds\n");
@@ -377,6 +398,7 @@ struct pollfd *initPollFds(size_t POLL_TABLE_SIZE, int *poll_last_index) {
 }
 
 void reallocPollFds(struct pollfd **poll_fds, size_t *POLL_TABLE_SIZE) {
+    # увеличить размер очереди, если необходимо
     size_t prev_size = *POLL_TABLE_SIZE;
     *POLL_TABLE_SIZE *= 2;
     //fprintf(stderr, "realloc poll_fds, new expected size = %lu\n", *POLL_TABLE_SIZE);
@@ -393,6 +415,7 @@ void reallocPollFds(struct pollfd **poll_fds, size_t *POLL_TABLE_SIZE) {
 }
 
 void addFdToPollFds(struct pollfd **poll_fds, int *poll_last_index, size_t *POLL_TABLE_SIZE, int fd, short events) {
+    # добавить в очередь для рассылки ивентов новый файловый дескриптор для сервера/клиента
     if (fd < 0) {
         return;
     }
@@ -412,6 +435,7 @@ void addFdToPollFds(struct pollfd **poll_fds, int *poll_last_index, size_t *POLL
 }
 
 int connectToServerHost(char *hostname, int port) {
+    # подключиться к удалённому серверу для отправки запросов и чтения ответов
     if (hostname == NULL || port < 0) {
         return -1;
     }
@@ -440,6 +464,7 @@ int connectToServerHost(char *hostname, int port) {
 }
 
 int initListener(int port) {
+    # подготовка для прослушивание порта, на который клиент будет отсылать запросы
     int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (listen_fd < 0) {
         perror("socket");
@@ -471,6 +496,7 @@ int initListener(int port) {
 }
 
 void acceptNewClient(int listen_fd) {
+    # подключить новый клиент для последующей обработки запроса
     //fprintf(stderr, "accepting new client...\n");
     int new_client_fd = accept(listen_fd, NULL, NULL);
     if (new_client_fd == -1) {
@@ -491,6 +517,7 @@ void acceptNewClient(int listen_fd) {
 }
 
 void changeEventForFd(struct pollfd *poll_fds, const int *poll_last_index, int fd, short new_events) {
+    # изменить тип ивента (с записи на чтение или наоборот)
     if (fd < 0) {
         return;
     }
@@ -503,6 +530,7 @@ void changeEventForFd(struct pollfd *poll_fds, const int *poll_last_index, int f
 }
 
 void removeSubscriber(int thread_fd, cache_t *record) {
+    # сказать, что кэш может больше не оповещать клиента client_num
     if (record == NULL || thread_fd < 0) {
         return;
     }
@@ -518,6 +546,7 @@ void removeSubscriber(int thread_fd, cache_t *record) {
 
 void disconnectClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, struct pollfd *poll_fds,
         int *poll_last_index) {
+    # почистить запись клиента
     if (client_num < 0 || client_num >= CLIENTS_SIZE) {
         return;
     }
@@ -542,6 +571,7 @@ void disconnectClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, st
 }
 
 int addSubscriber(int thread_fd, cache_t *record) {
+    # сказать кэшу, что надо оповещать клиента с номером clien_num, когда туда что-то добавится
     if (record == NULL || thread_fd < 0 || !record->valid) {
         return -1;
     }
@@ -576,6 +606,7 @@ int addSubscriber(int thread_fd, cache_t *record) {
 }
 
 void notifySubscribers(cache_t *record) {
+    # оповестить всех, кто подписан на ивенты, что ивент сработал (можно считывать с сервера/клиента, можно отправлять запрос на сервер/клиент)
     pthread_mutex_lock(&record->subs_mutex);
     for (int i = 0; i < record->SUBSCRIBERS_SIZE; i++) {
         if (record->subscribers[i] != -1) {
@@ -588,6 +619,7 @@ void notifySubscribers(cache_t *record) {
 
 void disconnectServer(server_t *servers, size_t SERVERS_SIZE, int server_num, struct pollfd *poll_fds,
         int *poll_last_index) {
+    # отключаемся от сервера
     if (server_num < 0 || server_num > SERVERS_SIZE) {
         return;
     }
@@ -605,6 +637,7 @@ void disconnectServer(server_t *servers, size_t SERVERS_SIZE, int server_num, st
 
 void freeCacheRecord(cache_t *record, server_t *servers, size_t SERVERS_SIZE, struct pollfd *poll_fds,
         int *poll_last_index) {
+    # освободить запись внутри кэша (если сервер перестал отвечать, то запись можно переиспользовать)
     if (record == NULL) {
         return;
     }
@@ -647,6 +680,7 @@ void freeCacheRecord(cache_t *record, server_t *servers, size_t SERVERS_SIZE, st
 }
 
 void printCacheRecord(cache_t *record) {
+    # вывести запись из кэша на экран
     if (record == NULL) {
         fprintf(stderr, "cache record is NULL\n");
         return;
@@ -696,6 +730,7 @@ void printCacheRecord(cache_t *record) {
 }
 
 void printCacheList() {
+    # вывести весь кэш
     pthread_mutex_lock(&cache_list->mutex);
     cache_node_t *list_nodes = cache_list->head;
     fprintf(stderr, "printing cache...\n");
@@ -710,6 +745,7 @@ void findAndAddCacheRecord(char *url, size_t url_len, client_t *clients, size_t 
                            char *host, int REQUEST_SIZE, struct pollfd **poll_fds, int *poll_last_index,
                                    size_t *POLL_TABLE_SIZE, server_t **servers, size_t *SERVERS_SIZE) {
     //fprintf(stderr, "adding client %d to cache record\nwith url: %.*s\n", client_num, (int)url_len, url);
+    # найти запись в кэше, если нет, то создать новую и подготовить всё для считывания
     pthread_mutex_lock(&cache_list->mutex);
     cache_node_t *list_nodes = cache_list->head;
     cache_node_t *prev_node = NULL;
@@ -825,6 +861,7 @@ void shiftRequest(client_t *clients, size_t CLIENTS_SIZE, int client_num, int pr
 
 void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, struct pollfd **poll_fds,
         int *poll_last_index, size_t *POLL_TABLE_SIZE, server_t **servers, size_t *SERVERS_SIZE) {
+    # считать запрос с клиента
     //fprintf(stderr, "read from client %d\n", client_num);
     if (client_num < 0 || client_num > CLIENTS_SIZE || clients[client_num].fd == -1) {
         return;
@@ -864,6 +901,8 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
     int minor_version;
     size_t num_headers = 100;
     struct phr_header headers[num_headers];
+    
+    # пропарсить запрос с клиента
     int pret = phr_parse_request(clients[client_num].request, clients[client_num].request_index,
                                  (const char **)&method, &method_len, (const char **)&path, &path_len,
                                  &minor_version, headers, &num_headers, 0);
@@ -899,6 +938,7 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
             disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
             return;
         }
+        # найти запись в кэше и подключиться к серверу, если нет записи
         findAndAddCacheRecord(url, url_len, clients, CLIENTS_SIZE, client_num, host, pret, poll_fds, poll_last_index,
                               POLL_TABLE_SIZE, servers, SERVERS_SIZE);
 
@@ -913,6 +953,7 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
 
 void writeToServer(server_t *servers, size_t SERVERS_SIZE, int server_num, struct pollfd *poll_fds,
         int *poll_last_index) {
+    # отправить запрос на удалённый сервер
     //fprintf(stderr, "write to server %d, SERVERS_SIZE = %lu\n", server_num, SERVERS_SIZE);
     if (server_num < 0 || server_num >= SERVERS_SIZE || servers[server_num].fd == -1) {
         return;
@@ -936,6 +977,7 @@ void writeToServer(server_t *servers, size_t SERVERS_SIZE, int server_num, struc
 
 void readFromServer(server_t *servers, size_t SERVERS_SIZE, int server_num, struct pollfd *poll_fds,
         int *poll_last_index) {
+     # считываем кусок ответа от сервера размерами по BUFSIZ
     //fprintf(stderr, "read from server %d\n", server_num);
     if (server_num < 0 || server_num >= SERVERS_SIZE || servers[server_num].fd == -1) {
         return;
@@ -994,11 +1036,15 @@ void readFromServer(server_t *servers, size_t SERVERS_SIZE, int server_num, stru
     size_t num_headers = 100;
     struct phr_header headers[num_headers];
     pthread_rwlock_rdlock(&servers[server_num].cache_record->rw_lock);
+    
+    # парсим ответ сервера
     int pret = phr_parse_response(servers[server_num].cache_record->response,
                                   servers[server_num].cache_record->response_index,
                                   &minor_version, &status, (const char **)&msg, &msg_len, headers,
                                   &num_headers, prev_len);
     pthread_rwlock_unlock(&servers[server_num].cache_record->rw_lock);
+    
+    # говорим, что можно записывать ответ сервера на клиент
     notifySubscribers(servers[server_num].cache_record);
     
     if (pret > 0) {
@@ -1011,7 +1057,7 @@ void readFromServer(server_t *servers, size_t SERVERS_SIZE, int server_num, stru
 
 void writeToClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, struct pollfd *poll_fds,
         int *poll_last_index, server_t *servers, size_t SERVERS_SIZE) {
-    
+    # передаём ответ сервера на клиент
     if (client_num < 0 || client_num >= CLIENTS_SIZE || clients[client_num].fd == -1) {
         fprintf(stderr, "invalid client_num %d\n", client_num);
         return;
@@ -1063,6 +1109,7 @@ static void sigCatch(int sig) {
 }
 
 void *threadFunc(void *arg) {
+    # функционал главного потока из lab31
     //fprintf(stderr, "starting pooled thread...\n");
     int thread_fd = eventfd(0, EFD_NONBLOCK);
     if (thread_fd < 0) {
@@ -1237,6 +1284,9 @@ void *threadFunc(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
+    # создаём пул потоков и пул тасков
+    # таск = считывание/запись на сервер/клиент
+    # каждый поток когда выполняет свой таск уходит обратно в пул потоков
     if (argc < 3) {
         fprintf(stderr, "Error wrong amount of arguments\nexpected:\n1) thread poll size\n2) port\n");
         exit(ERROR_INVALID_ARGS);
